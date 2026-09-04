@@ -8,16 +8,8 @@ packages:
   - packages/vue
 
 allowBuilds:
-  '@firebase/util': set this to true or false
-  core-js: set this to true or false
-  protobufjs: set this to true or false
-  vue-demi: set this to true or false
-
-onlyBuiltDependencies:
-  - esbuild
-
-ignoredBuiltDependencies:
-  - '@firebase/util'
-  - core-js
-  - protobufjs
-  - vue-demi
+  '@firebase/util': false
+  core-js: false
+  esbuild: true
+  protobufjs: false
+  vue-demi: false

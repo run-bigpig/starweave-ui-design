@@ -31,6 +31,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build workspace packages
+        run: pnpm run build:packages
       - name: Type-check
         run: pnpm run typecheck
       - name: Build Web UI
@@ -58,6 +60,7 @@ jobs:
       - name: Build release archive
         run: |
           pnpm install --frozen-lockfile
+          pnpm run build:packages
           pnpm run typecheck
           pnpm run build
           node --input-type=module <<'NODE'
