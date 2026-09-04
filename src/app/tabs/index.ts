@@ -387,7 +387,8 @@ export async function openStorageDocumentInNewTab(document: StorageDocument): Pr
 export async function openFileInNewTab(
   file: File,
   handle?: FileSystemFileHandle,
-  path?: string
+  path?: string,
+  preferredStore?: EditorStore
 ): Promise<void> {
   const identity: DocumentSourceIdentity = {
     handle: handle ?? null,
@@ -413,7 +414,12 @@ export async function openFileInNewTab(
       return { kind: 'existing' as const }
     }
 
-    const { store, created } = reusableTabStore()
+    const preferredTab = preferredStore ? getTabForStore(preferredStore) : undefined
+    if (preferredStore && !preferredTab) throw new Error('Preferred document tab is unavailable')
+    if (preferredTab) switchTab(preferredTab.id)
+    const { store, created } = preferredStore
+      ? { store: preferredStore, created: false }
+      : reusableTabStore()
     store.state.documentName = file.name.replace(/\.[^.]+$/i, '')
     const load = store.preparationController.begin({
       kind: isDOMImportFile(file) ? 'dom-import' : 'document-open',

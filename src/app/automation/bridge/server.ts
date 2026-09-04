@@ -4,7 +4,7 @@ import { readonly, ref } from 'vue'
 import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
 import type { EditorStore } from '@/app/editor/active-store'
-import { createTab, getTabForStore, switchTab } from '@/app/tabs'
+import { createTab, getTabById, getTabForStore, switchTab } from '@/app/tabs'
 
 export type StarWeaveBridgePhase =
   | 'standalone'
@@ -123,6 +123,12 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
       if (message.type !== 'request' || !message.id || !message.command) return
       try {
         const result = await handleRequest(session.store, message.command, message.args)
+        if ((message.command === 'open_file' || message.command === 'new_document') && isRecord(result)) {
+          const target = isRecord(result.target) ? result.target : undefined
+          const documentId = typeof target?.documentId === 'string' ? target.documentId : undefined
+          const tab = documentId ? getTabById(documentId) : undefined
+          if (tab) session.store = tab.store
+        }
         const response = isRecord(result) ? result : { ok: true, result }
         if (current.readyState === WebSocket.OPEN) {
           current.send(JSON.stringify({ type: 'response', id: message.id, ...response }))

@@ -63,7 +63,7 @@ export async function handleNewDocument(
   return responseWithTarget({ ok: true, result: { created: true } }, target)
 }
 
-export async function handleOpenFile(_target: AutomationTarget, args: unknown): Promise<unknown> {
+export async function handleOpenFile(target: AutomationTarget, args: unknown): Promise<unknown> {
   const {
     path,
     name,
@@ -86,21 +86,26 @@ export async function handleOpenFile(_target: AutomationTarget, args: unknown): 
     const response = await fetch(targetURL, { method: 'POST' })
     if (!response.ok) throw new Error(`Failed to restore design file: ${response.statusText}`)
     const fileName = name?.toLowerCase().endsWith('.fig') ? name : 'Recovered.fig'
-    await openFileInNewTab(new File([await response.blob()], fileName))
-    const target = resolveAutomationTarget(getActiveStore(), undefined)
-    return responseWithTarget({ ok: true, result: { opened: true, restored: true } }, target)
+    await openFileInNewTab(new File([await response.blob()], fileName), undefined, undefined, target.store)
+    const openedTarget = resolveAutomationTarget(target.store, undefined)
+    return responseWithTarget(
+      { ok: true, result: { opened: true, restored: true } },
+      openedTarget
+    )
   }
   if (!path) throw new Error('Missing "path" in args')
+  let openedStore = target.store
   if (isTauri()) {
     await openFileFromPath(path)
+    openedStore = getActiveStore()
   } else {
     const resourceURL = resolveBrowserFileURL(path)
     const response = await fetch(resourceURL)
     if (!response.ok) throw new Error(`Failed to fetch file: ${response.statusText}`)
     const name = resourceURL.pathname.split('/').pop() ?? 'file.fig'
     const file = new File([await response.blob()], name)
-    await openFileInNewTab(file, undefined, resourceURL.href)
+    await openFileInNewTab(file, undefined, resourceURL.href, target.store)
   }
-  const target = resolveAutomationTarget(getActiveStore(), undefined)
-  return responseWithTarget({ ok: true, result: { opened: true } }, target)
+  const openedTarget = resolveAutomationTarget(openedStore, undefined)
+  return responseWithTarget({ ok: true, result: { opened: true } }, openedTarget)
 }

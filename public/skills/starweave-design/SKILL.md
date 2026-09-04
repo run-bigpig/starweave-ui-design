@@ -7,7 +7,7 @@ description: 使用 StarWeave Design 的 MCP 画布把文字描述、截图或�
 
 ## 核心原则
 
-直接在画布上工作，不要先输出任务列表、检查清单或长篇设计计划。意图足够明确后，立即调用 `open_design_workspace`，并省略 `design_session_id`，让系统为当前 Agent/MCP 会话创建独立画布会话和 `document_id`；后续所有官方 OpenPencil 工具都必须持续使用这个 `document_id`。只有明确恢复当前会话自己先前返回的画布时，才传回它自己的 `design_session_id`。
+直接在画布上工作，不要先输出任务列表、检查清单或长篇设计计划。意图足够明确后，立即调用 `open_design_workspace`。先检查当前对话中是否已有本会话先前成功返回的 `design_session_id`：有则传回它以恢复已保存画布，没有才省略，让系统创建独立画布会话和 `document_id`。后续所有官方 OpenPencil 工具都必须持续使用这个 `document_id`，不要使用其他会话的 ID。
 
 不同 Agent/MCP 会话必须使用不同设计文件：不要把另一个会话的需求追加为当前文件的新 Page，不要复用其他会话的文档，也不要为了组织多个会话而创建 Page。`list_documents` 只会展示当前会话绑定的文档。一个会话可以在自己的文档中维护页面结构，但跨会话隔离的边界是 Document/文件，而不是 Page。
 
@@ -24,7 +24,7 @@ description: 使用 StarWeave Design 的 MCP 画布把文字描述、截图或�
 
 主要工具按用途选择：
 
-- 打开与上下文：`open_design_workspace`、`list_documents`、`get_current_page`、`get_page_tree`、`get_node`。
+- 打开与上下文：`open_design_workspace`、`open_file`、`new_document`、`list_documents`、`get_current_page`、`get_page_tree`、`get_node`。`open_file` 会通过桌面原生对话框让用户授权选择 `.fig`；`new_document` 会创建新的独立设计会话和文件绑定，只在用户明确要求另开空白设计时使用。
 - 查找与选区：`get_selection`、`find_nodes`、`query_nodes`、`select_nodes`。
 - 生成：`render`。使用 `parent_id` 向稳定容器填充，使用 `replace_id` 替换完整区域。
 - 精确修改：`set_text`、`set_fill`、`set_stroke`、`set_layout`、`set_layout_child`、`set_radius`、`set_text_properties`、`update_node`、`batch_update`。
@@ -121,6 +121,6 @@ Harness 会先把用户附加的截图或线框图转换为 `[Image: 文件名]`
 4. 必要时使用 `export_image` 查看整体视觉结果，并用专用修改工具修正具体问题。
 5. 只修复有证据的问题。装饰性重绘不能破坏已经稳定的结构。
 
-完成质量校验后调用 `save_file(document_id=当前会话文档ID)`。只有保存成功后，才向用户报告设计已完成并可在后续会话中恢复。
+完成质量校验后调用 `save_file(document_id=当前会话文档ID)`。只有保存成功后，才向用户报告设计已完成并可在后续会话中恢复；最终回复应保留本次 `design_session_id`，以便当前 Harness 会话在画布窗口或 StarWeave 重启后从对话历史中取回并恢复对应文件。
 
 最终页面应像由少量一致的空间积木搭成：根页面组织区域，区域组织组件，组件内部才是文字、图标和形状。流式反馈来自这些完整积木逐块出现在画布上，而不是一次性倾倒整页或让大量散点同时变化。
