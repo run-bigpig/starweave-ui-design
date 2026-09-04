@@ -27,7 +27,6 @@ import TabBar from '@/components/TabBar.vue'
 import RenameSelectionDialog from '@/components/selection/RenameSelectionDialog.vue'
 import EditorWorkspace from '@/components/editor/EditorWorkspace.vue'
 import HomeWorkspace from '@/components/home/HomeWorkspace.vue'
-import StarWeaveConnectionStatus from '@/components/StarWeaveConnectionStatus.vue'
 
 const route = useRoute()
 const createdInitialTab = tabCount() === 0
@@ -107,6 +106,5 @@ onUnmounted(() => {
     <TabBar />
     <HomeWorkspace v-show="activeTab?.kind === 'home'" @new-document="createDocumentInCurrentTab" />
     <EditorWorkspace v-if="activeTab?.kind !== 'home'" />
-    <StarWeaveConnectionStatus />
   </div>
 </template>

@@ -4,6 +4,7 @@ import { readonly, ref } from 'vue'
 import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
 import type { EditorStore } from '@/app/editor/active-store'
+import { createTab, getTabForStore, switchTab } from '@/app/tabs'
 
 export type StarWeaveBridgePhase =
   | 'standalone'
@@ -20,7 +21,16 @@ export const starWeaveBridgeState = {
   detail: readonly(detail)
 }
 
-function connectionParameters(): { sessionId: string; token: string } | null {
+type ConnectionParameters = { sessionId: string; token: string }
+
+type SessionConnection = ConnectionParameters & {
+  store: EditorStore
+  socket: WebSocket | null
+  reconnectTimer?: ReturnType<typeof setTimeout>
+  registered: boolean
+}
+
+function connectionParameters(): ConnectionParameters | null {
   const url = new URL(window.location.href)
   const sessionId = url.searchParams.get('session')
   const token = url.searchParams.get('token')
@@ -31,34 +41,46 @@ function connectionParameters(): { sessionId: string; token: string } | null {
 }
 
 export function connectStarWeaveAutomation(getStore: () => EditorStore): () => void {
-  const connection = connectionParameters()
-  if (!connection) return () => undefined
+  const initialConnection = connectionParameters()
+  if (!initialConnection) return () => undefined
 
-  let socket: WebSocket | null = null
-  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
   const { handleRequest } = createAutomationCommandHandlers(makeFigmaFromStore)
+  const sessions = new Map<string, SessionConnection>()
 
-  const scheduleReconnect = () => {
-    if (stopped) return
-    clearTimeout(reconnectTimer)
-    reconnectTimer = setTimeout(connect, 1500)
+  const refreshStatus = (fallback: StarWeaveBridgePhase = 'disconnected') => {
+    if ([...sessions.values()].some((session) => session.registered)) {
+      phase.value = 'connected'
+      detail.value = 'Agent 实时设计已连接'
+      return
+    }
+    phase.value = fallback
+    detail.value = fallback === 'error' ? '无法连接 StarWeave，正在重试…' : '连接已断开，正在重试…'
   }
 
-  const connect = () => {
-    phase.value = 'connecting'
-    detail.value = '正在连接 StarWeave Agent…'
+  const revealSession = (sessionId: string) => {
+    const session = sessions.get(sessionId)
+    const tab = session ? getTabForStore(session.store) : undefined
+    if (tab) switchTab(tab.id)
+  }
+
+  const connect = (session: SessionConnection) => {
+    if (!sessions.has(session.sessionId) || stopped) return
+    if (![...sessions.values()].some((candidate) => candidate.registered)) {
+      phase.value = 'connecting'
+      detail.value = '正在连接 StarWeave Agent…'
+    }
     const bridgeURL = new URL('/bridge', window.location.origin)
     bridgeURL.protocol = bridgeURL.protocol === 'https:' ? 'wss:' : 'ws:'
     const current = new WebSocket(bridgeURL)
-    socket = current
+    session.socket = current
 
     current.onopen = () => {
       current.send(
         JSON.stringify({
           type: 'register',
-          sessionId: connection.sessionId,
-          token: connection.token
+          sessionId: session.sessionId,
+          token: session.token
         })
       )
     }
@@ -70,6 +92,7 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
         command?: string
         args?: unknown
         sessionId?: string
+        token?: string
       }
       try {
         message = JSON.parse(String(event.data))
@@ -77,13 +100,29 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
         return
       }
       if (message.type === 'registered') {
-        phase.value = 'connected'
-        detail.value = 'Agent 实时设计已连接'
+        session.registered = true
+        refreshStatus()
+        return
+      }
+      if (message.type === 'open-session' && message.sessionId && message.token) {
+        let target = sessions.get(message.sessionId)
+        if (!target) {
+          const tab = createTab()
+          target = startSession(
+            { sessionId: message.sessionId, token: message.token },
+            tab.store
+          )
+        }
+        revealSession(target.sessionId)
+        return
+      }
+      if (message.type === 'reveal-session' && message.sessionId) {
+        revealSession(message.sessionId)
         return
       }
       if (message.type !== 'request' || !message.id || !message.command) return
       try {
-        const result = await handleRequest(getStore(), message.command, message.args)
+        const result = await handleRequest(session.store, message.command, message.args)
         const response = isRecord(result) ? result : { ok: true, result }
         if (current.readyState === WebSocket.OPEN) {
           current.send(JSON.stringify({ type: 'response', id: message.id, ...response }))
@@ -103,26 +142,43 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
     }
 
     current.onclose = (event) => {
-      if (socket === current) socket = null
+      if (session.socket === current) session.socket = null
+      session.registered = false
       if (stopped || event.code === 1000) return
-      phase.value = 'disconnected'
-      detail.value = '连接已断开，正在重试…'
-      scheduleReconnect()
+      refreshStatus()
+      clearTimeout(session.reconnectTimer)
+      session.reconnectTimer = setTimeout(() => connect(session), 1500)
     }
 
     current.onerror = () => {
-      phase.value = 'error'
-      detail.value = '无法连接 StarWeave，正在重试…'
+      refreshStatus('error')
       current.close()
     }
   }
 
-  connect()
+  const startSession = (connection: ConnectionParameters, store: EditorStore): SessionConnection => {
+    const existing = sessions.get(connection.sessionId)
+    if (existing) return existing
+    const session: SessionConnection = {
+      ...connection,
+      store,
+      socket: null,
+      registered: false
+    }
+    sessions.set(session.sessionId, session)
+    connect(session)
+    return session
+  }
+
+  startSession(initialConnection, getStore())
   return () => {
     stopped = true
-    clearTimeout(reconnectTimer)
-    socket?.close(1000, 'workspace closed')
-    socket = null
+    for (const session of sessions.values()) {
+      clearTimeout(session.reconnectTimer)
+      session.socket?.close(1000, 'workspace closed')
+      session.socket = null
+    }
+    sessions.clear()
   }
 }
 

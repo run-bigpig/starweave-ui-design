@@ -87,6 +87,7 @@ export function createDocumentIOActions(
     openDOMFile,
     importDOMText,
     saveFigFile: sourceActions.saveFigFile,
-    saveFigFileAs: sourceActions.saveFigFileAs
+    saveFigFileAs: sourceActions.saveFigFileAs,
+    saveFigFileToURL: sourceActions.saveFigFileToURL
   }
 }

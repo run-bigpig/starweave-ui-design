@@ -21,6 +21,7 @@ import IconChevronRight from '~icons/lucide/chevron-right'
 
 import { vTestId, useI18n } from '@open-pencil/vue'
 import AppShortcutText from '@/components/ui/AppShortcutText.vue'
+import StarWeaveConnectionStatus from '@/components/StarWeaveConnectionStatus.vue'
 import { useMenuUI } from '@/components/ui/menu'
 import { IS_TAURI } from '@/constants'
 import { useAppMenu } from '@/app/shell/menu/app-menu'
@@ -78,6 +79,7 @@ const subMenuCls = useMenuUI({ content: 'min-w-44' })
         @dblclick="startRename"
         >{{ store.state.documentName }}</span
       >
+      <StarWeaveConnectionStatus />
       <Tip :label="settings.title">
         <button
           type="button"

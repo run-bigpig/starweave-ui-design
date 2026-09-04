@@ -2,22 +2,28 @@
 import { computed } from 'vue'
 
 import { starWeaveBridgeState } from '@/app/automation/bridge/server'
+import Tip from '@/components/ui/Tip.vue'
 
 const connected = computed(() => starWeaveBridgeState.phase.value === 'connected')
 const standalone = computed(() => starWeaveBridgeState.phase.value === 'standalone')
 </script>
 
 <template>
-  <div
-    class="pointer-events-none fixed top-3 right-3 z-50 flex items-center gap-2 rounded-md border border-border bg-panel/95 px-2.5 py-1.5 text-[10px] text-muted shadow-sm backdrop-blur"
-    role="status"
-    aria-live="polite"
-  >
+  <Tip :label="starWeaveBridgeState.detail.value" side="bottom">
     <span
-      class="size-1.5 rounded-full"
-      :class="connected ? 'bg-emerald-500' : standalone ? 'bg-muted' : 'animate-pulse bg-amber-500'"
-      aria-hidden="true"
-    />
-    {{ starWeaveBridgeState.detail.value }}
-  </div>
+      class="flex size-6 shrink-0 items-center justify-center rounded outline-none transition-colors hover:bg-hover focus-visible:ring-1 focus-visible:ring-accent"
+      role="status"
+      tabindex="0"
+      aria-live="polite"
+    >
+      <span
+        class="size-2 rounded-full shadow-[0_0_0_2px_rgb(255_255_255/0.06)]"
+        :class="
+          connected ? 'bg-emerald-500' : standalone ? 'bg-muted' : 'animate-pulse bg-amber-500'
+        "
+        aria-hidden="true"
+      />
+      <span class="sr-only">{{ starWeaveBridgeState.detail.value }}</span>
+    </span>
+  </Tip>
 </template>

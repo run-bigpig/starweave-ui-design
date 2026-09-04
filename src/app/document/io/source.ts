@@ -85,6 +85,23 @@ export function createDocumentSourceActions({
     onDownloadSuccess: (version) => recovery.markProtectedVersion(version)
   })
 
+  async function saveFigFileToURL(uploadURL: string) {
+    const version = state.sceneVersion
+    const data = await buildFigFile()
+    const response = await fetch(uploadURL, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: data
+    })
+    if (!response.ok) {
+      const message = await response.text()
+      throw new Error(`StarWeave desktop save failed (${response.status}): ${message}`)
+    }
+    setLastWriteTime(Date.now())
+    setSavedVersion(version)
+    await recovery.markProtectedVersion(version)
+  }
+
   const autosave = createAutosave({
     state,
     getSavedVersion,
@@ -156,6 +173,7 @@ export function createDocumentSourceActions({
     disposeDocumentIO,
     saveFigFile,
     saveFigFileAs,
+    saveFigFileToURL,
     getStorageBinding,
     getRecoveryId: () => recovery.getRecoveryId(),
     adoptRecoverySnapshot: (id: string, version: number) =>

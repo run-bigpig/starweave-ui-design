@@ -54,6 +54,16 @@ watch(
 
 let tauriFontCacheConfigured = false
 
+function isStarWeaveDesktopSession(): boolean {
+  if (typeof window === 'undefined') return false
+  const url = new URL(window.location.href)
+  return (
+    url.hostname === '127.0.0.1' &&
+    Boolean(url.searchParams.get('session')) &&
+    Boolean(url.searchParams.get('token'))
+  )
+}
+
 function configureTauriFontCache() {
   if (tauriFontCacheConfigured || !isTauri()) return
   tauriFontCacheConfigured = true
@@ -92,6 +102,12 @@ export function preloadFonts(): void {
   if (isTauri()) {
     void getTauriFonts().then(registerFontFaces)
     return
+  }
+  if (isStarWeaveDesktopSession()) {
+    void fontManager
+      .requestLocalFontAccess()
+      .then(() => fontManager.ensureFallbackPack())
+      .catch(() => undefined)
   }
   if (onlineFontsEnabled.value) fontManager.preloadWebFontFamilies()
 }

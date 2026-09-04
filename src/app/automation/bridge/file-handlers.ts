@@ -10,7 +10,23 @@ import { isTauri } from '@/app/tauri/env'
 
 export async function handleSaveFile(target: AutomationTarget, args: unknown): Promise<unknown> {
   const store = target.store
-  const path = (args as { path?: string }).path
+  const { path, starweave_upload_url: uploadURL } = args as {
+    path?: string
+    starweave_upload_url?: string
+  }
+  if (uploadURL) {
+    const targetURL = new URL(uploadURL, window.location.origin)
+    if (
+      targetURL.origin !== window.location.origin ||
+      !/^\/design-save\/[-_A-Za-z0-9]{43}$/u.test(targetURL.pathname) ||
+      targetURL.search ||
+      targetURL.hash
+    ) {
+      throw new Error('Invalid StarWeave desktop save upload URL')
+    }
+    await store.saveFigFileToURL(targetURL.href)
+    return { ok: true }
+  }
   if (path) {
     store.setPlannedFilePath(path)
     await ensureTauriParentDirectory(path)
@@ -48,7 +64,32 @@ export async function handleNewDocument(
 }
 
 export async function handleOpenFile(_target: AutomationTarget, args: unknown): Promise<unknown> {
-  const path = (args as { path?: string }).path
+  const {
+    path,
+    name,
+    starweave_download_url: downloadURL
+  } = args as {
+    path?: string
+    name?: string
+    starweave_download_url?: string
+  }
+  if (downloadURL) {
+    const targetURL = new URL(downloadURL, window.location.origin)
+    if (
+      targetURL.origin !== window.location.origin ||
+      !/^\/design-open\/[-_A-Za-z0-9]{43}$/u.test(targetURL.pathname) ||
+      targetURL.search ||
+      targetURL.hash
+    ) {
+      throw new Error('Invalid StarWeave desktop design URL')
+    }
+    const response = await fetch(targetURL, { method: 'POST' })
+    if (!response.ok) throw new Error(`Failed to restore design file: ${response.statusText}`)
+    const fileName = name?.toLowerCase().endsWith('.fig') ? name : 'Recovered.fig'
+    await openFileInNewTab(new File([await response.blob()], fileName))
+    const target = resolveAutomationTarget(getActiveStore(), undefined)
+    return responseWithTarget({ ok: true, result: { opened: true, restored: true } }, target)
+  }
   if (!path) throw new Error('Missing "path" in args')
   if (isTauri()) {
     await openFileFromPath(path)
