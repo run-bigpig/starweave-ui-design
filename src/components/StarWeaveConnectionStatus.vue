@@ -9,7 +9,7 @@ const standalone = computed(() => starWeaveBridgeState.phase.value === 'standalo
 
 <template>
   <div
-    class="pointer-events-none fixed right-3 bottom-3 z-50 flex items-center gap-2 rounded-md border border-border bg-panel/95 px-2.5 py-1.5 text-[10px] text-muted shadow-sm backdrop-blur"
+    class="pointer-events-none fixed top-3 left-3 z-50 flex items-center gap-2 rounded-md border border-border bg-panel/95 px-2.5 py-1.5 text-[10px] text-muted shadow-sm backdrop-blur"
     role="status"
     aria-live="polite"
   >

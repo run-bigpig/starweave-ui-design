@@ -51,7 +51,6 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
     const bridgeURL = new URL('/bridge', window.location.origin)
     bridgeURL.protocol = bridgeURL.protocol === 'https:' ? 'wss:' : 'ws:'
     const current = new WebSocket(bridgeURL)
-    let requestQueue = Promise.resolve()
     socket = current
 
     current.onopen = () => {
@@ -64,7 +63,7 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
       )
     }
 
-    current.onmessage = (event) => {
+    current.onmessage = async (event) => {
       let message: {
         type?: string
         id?: string
@@ -83,32 +82,24 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
         return
       }
       if (message.type !== 'request' || !message.id || !message.command) return
-      const requestId = message.id
-      const command = message.command
-      const args = message.args
-      requestQueue = requestQueue.then(async () => {
-        detail.value = requestDetail(command, args)
-        try {
-          const result = await handleRequest(getStore(), command, args)
-          const response = isRecord(result) ? result : { ok: true, result }
-          if (current.readyState === WebSocket.OPEN) {
-            current.send(JSON.stringify({ type: 'response', id: requestId, ...response }))
-          }
-        } catch (error) {
-          if (current.readyState === WebSocket.OPEN) {
-            current.send(
-              JSON.stringify({
-                type: 'response',
-                id: requestId,
-                ok: false,
-                error: error instanceof Error ? error.message : String(error)
-              })
-            )
-          }
-        } finally {
-          if (current.readyState === WebSocket.OPEN) detail.value = 'Agent 实时设计已连接'
+      try {
+        const result = await handleRequest(getStore(), message.command, message.args)
+        const response = isRecord(result) ? result : { ok: true, result }
+        if (current.readyState === WebSocket.OPEN) {
+          current.send(JSON.stringify({ type: 'response', id: message.id, ...response }))
         }
-      })
+      } catch (error) {
+        if (current.readyState === WebSocket.OPEN) {
+          current.send(
+            JSON.stringify({
+              type: 'response',
+              id: message.id,
+              ok: false,
+              error: error instanceof Error ? error.message : String(error)
+            })
+          )
+        }
+      }
     }
 
     current.onclose = (event) => {
@@ -133,13 +124,6 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
     socket?.close(1000, 'workspace closed')
     socket = null
   }
-}
-
-function requestDetail(command: string, args: unknown): string {
-  if (command === 'tool' && isRecord(args) && typeof args.name === 'string') {
-    return `Agent 正在编辑：${args.name}`
-  }
-  return 'Agent 正在操作画布…'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
