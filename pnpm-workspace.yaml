@@ -1,0 +1,23 @@
+packages:
+  - packages/scene-graph
+  - packages/pen
+  - packages/kiwi
+  - packages/fig
+  - packages/core
+  - packages/dom-css
+  - packages/vue
+
+allowBuilds:
+  '@firebase/util': set this to true or false
+  core-js: set this to true or false
+  protobufjs: set this to true or false
+  vue-demi: set this to true or false
+
+onlyBuiltDependencies:
+  - esbuild
+
+ignoredBuiltDependencies:
+  - '@firebase/util'
+  - core-js
+  - protobufjs
+  - vue-demi

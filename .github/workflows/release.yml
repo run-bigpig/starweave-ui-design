@@ -1,0 +1,84 @@
+name: Validate and release Web UI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: starweave-ui-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.12.0'
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type-check
+        run: pnpm run typecheck
+      - name: Build Web UI
+        run: pnpm run build
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.12.0'
+          cache: pnpm
+      - name: Verify release version
+        run: |
+          node -e "const p=require('./package.json'); if (process.env.GITHUB_REF_NAME !== 'v' + p.version) { throw new Error('Tag must equal v' + p.version) }"
+      - name: Build release archive
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
+          pnpm run build
+          node --input-type=module <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises'
+          const pkg = JSON.parse(await readFile('package.json', 'utf8'))
+          await writeFile('dist/starweave-ui-build.json', `${JSON.stringify({
+            schemaVersion: 1,
+            version: pkg.version,
+            tag: process.env.GITHUB_REF_NAME,
+            commit: process.env.GITHUB_SHA
+          }, null, 2)}\n`)
+          NODE
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -C dist -czf starweave-ui-dist.tar.gz .
+          sha256sum starweave-ui-dist.tar.gz > starweave-ui-dist.tar.gz.sha256
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            starweave-ui-dist.tar.gz \
+            starweave-ui-dist.tar.gz.sha256 \
+            --verify-tag \
+            --generate-notes \
+            --title "StarWeave UI $GITHUB_REF_NAME"
