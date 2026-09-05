@@ -13,6 +13,7 @@ import { describeDiagnosticError, recordStorageFailure } from '@/app/diagnostics
 import { readFigDocument } from '@/app/document/io/fig'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
+import { createWorkspaceDocument, type WorkspaceFileBinding } from '@/app/document/io/workspace'
 import { getRecoveryStore, type RecoverySnapshotMeta } from '@/app/document/recovery'
 import { setActiveEditorStore } from '@/app/editor/active-store'
 import type { EditorPreparationHandle as DocumentLoadSession } from '@/app/editor/preparation/types'
@@ -41,6 +42,7 @@ export interface Tab {
   id: string
   store: EditorStore
   kind: TabKind
+  workspaceParent?: WorkspaceFileBinding
 }
 
 const io = new IORegistry(BUILTIN_IO_FORMATS)
@@ -92,16 +94,24 @@ export function getTabsSnapshot(): Tab[] {
   return [...tabsRef.value]
 }
 
-export function createTab(store?: EditorStore, initialGraph?: SceneGraph): Tab {
+export function createTab(store?: EditorStore, initialGraph?: SceneGraph, inheritWorkspace = true): Tab {
+  const parent = inheritWorkspace ? activeTab.value?.store.getWorkspaceBinding() ?? activeTab.value?.workspaceParent : undefined
   const s = store ?? createEditorStore(initialGraph)
   const tab: Tab = { id: generateTabId(), store: s, kind: 'document' }
   tabsRef.value = [...tabsRef.value, tab]
   activateTab(tab)
+  if (parent) initializeWorkspaceTab(tab, parent)
   return tab
 }
 
-export function createHomeTab(): Tab {
+function initializeWorkspaceTab(tab: Tab, parent: WorkspaceFileBinding) {
+  void tab.store.createWorkspaceDocumentSource(() => createWorkspaceDocument(parent, tab.id)).catch(() => undefined)
+}
+
+export function createHomeTab(workspaceParent?: WorkspaceFileBinding): Tab {
+  const parent = workspaceParent ?? activeTab.value?.store.getWorkspaceBinding() ?? activeTab.value?.workspaceParent
   const tab: Tab = { id: generateTabId(), store: createEditorStore(), kind: 'home' }
+  if (parent) tab.workspaceParent = parent
   tabsRef.value = [...tabsRef.value, tab]
   activateTab(tab)
   return tab
@@ -119,6 +129,7 @@ export function createDocumentInCurrentTab(): Tab {
   const current = activeTab.value
   if (current?.kind !== 'home') return createTab()
   leaveHome(current.id)
+  if (current.workspaceParent) initializeWorkspaceTab(current, current.workspaceParent)
   return getTabById(current.id) ?? current
 }
 
@@ -154,6 +165,9 @@ export async function closeTab(tabId: string): Promise<void> {
 
   const closingTab = tabsRef.value[idx]
   if (closingTab.kind === 'home' && tabsRef.value.length === 1) return
+  if (closingTab.store.getWorkspaceBinding()) {
+    await closingTab.store.saveFigFile()
+  }
   const wasActive = activeTabId.value === tabId
   coverThumbnailListeners.get(closingTab.store)?.()
   coverThumbnailListeners.delete(closingTab.store)
@@ -163,7 +177,7 @@ export async function closeTab(tabId: string): Promise<void> {
   tabsRef.value = tabsRef.value.filter((t) => t.id !== tabId)
 
   if (tabsRef.value.length === 0) {
-    createHomeTab()
+    createHomeTab(closingTab.store.getWorkspaceBinding() ?? closingTab.workspaceParent)
     return
   }
 
@@ -195,7 +209,7 @@ function reusableTabStore(): { store: EditorStore; created: boolean } {
     leaveHome(current.id)
     return { store: current.store, created: false }
   }
-  return { store: createTab().store, created: true }
+  return { store: createTab(undefined, undefined, false).store, created: true }
 }
 
 async function readFigForTab(file: File, signal?: AbortSignal): Promise<SceneGraph> {

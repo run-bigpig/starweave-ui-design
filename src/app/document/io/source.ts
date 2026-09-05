@@ -13,6 +13,7 @@ import type { DocumentSourceAccess } from '@/app/document/io/types'
 import { createDocumentRecovery } from '@/app/document/recovery'
 import { recoveryEnabled } from '@/app/document/recovery/preferences'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
+import { workspaceWriteURL, type WorkspaceFileBinding } from '@/app/document/io/workspace'
 
 type DocumentSourceState = EditorState & {
   documentName: string
@@ -30,6 +31,8 @@ type DocumentSourceOptions = DocumentSourceAccess & {
 }
 
 export function createDocumentSourceActions({
+  getWorkspaceBinding,
+  setWorkspaceBinding,
   editor,
   state,
   stopWatchingFile,
@@ -61,10 +64,12 @@ export function createDocumentSourceActions({
     state,
     isEnabled: () => recoveryEnabled.value,
     buildFigFile: buildRecoveryFigFile,
-    hasWritableSource: () => !!getFileHandle() || !!getFilePath() || !!getStorageBinding()
+    hasWritableSource: () => !!getWorkspaceBinding() || !!getFileHandle() || !!getFilePath() || !!getStorageBinding()
   })
 
   const { saveFigFile, saveFigFileAs, writeFile } = createSaveActions({
+    getWorkspaceBinding,
+    setWorkspaceBinding,
     state,
     buildFigFile,
     getFilePath,
@@ -84,6 +89,32 @@ export function createDocumentSourceActions({
     onWriteSuccess: (version) => recovery.markProtectedVersion(version),
     onDownloadSuccess: (version) => recovery.markProtectedVersion(version)
   })
+
+  let workspaceSaveTail = Promise.resolve()
+  let createPendingWorkspace: (() => Promise<WorkspaceFileBinding>) | undefined
+  let workspaceGeneration = 0
+  function saveCurrentFigFile(): Promise<void> {
+    if (!getWorkspaceBinding()) return saveFigFile()
+    const generation = workspaceGeneration
+    const operation = workspaceSaveTail.catch(() => undefined).then(async () => {
+      if (generation !== workspaceGeneration || !getWorkspaceBinding()) return
+      if (createPendingWorkspace) {
+        try {
+          const binding = await createPendingWorkspace()
+          if (generation !== workspaceGeneration || !getWorkspaceBinding()) return
+          setWorkspaceBinding(binding)
+          createPendingWorkspace = undefined
+        } catch (error) {
+          const binding = getWorkspaceBinding()
+          if (binding) binding.error = error instanceof Error ? error.message : String(error)
+          throw error
+        }
+      }
+      await saveFigFile()
+    })
+    workspaceSaveTail = operation
+    return operation
+  }
 
   async function saveFigFileToURL(uploadURL: string) {
     const version = state.sceneVersion
@@ -105,8 +136,9 @@ export function createDocumentSourceActions({
   const autosave = createAutosave({
     state,
     getSavedVersion,
-    hasWritableSource: () => !!getFileHandle() || !!getFilePath() || !!getStorageBinding(),
+    hasWritableSource: () => !!getWorkspaceBinding() || !!getFileHandle() || !!getFilePath() || !!getStorageBinding(),
     saveCurrentDocument: async (version) => {
+      if (getWorkspaceBinding()) { await saveCurrentFigFile(); return }
       const data = await buildFigFile()
       await writeFile(data, version)
     }
@@ -118,7 +150,10 @@ export function createDocumentSourceActions({
     handle?: FileSystemFileHandle,
     path?: string
   ) {
+    workspaceGeneration++
+    createPendingWorkspace = undefined
     stopWatchingFile()
+    setWorkspaceBinding(null)
     setStorageBinding(null)
     const isFig = sourceFormat === 'fig'
     setFileHandle(isFig ? (handle ?? null) : null)
@@ -133,6 +168,9 @@ export function createDocumentSourceActions({
   }
 
   function setStorageDocumentSource(binding: StorageDocumentBinding, documentName: string) {
+    workspaceGeneration++
+    createPendingWorkspace = undefined
+    setWorkspaceBinding(null)
     stopWatchingFile()
     setFileHandle(null)
     setFilePath(null)
@@ -146,6 +184,9 @@ export function createDocumentSourceActions({
   }
 
   function setPlannedFilePath(path: string) {
+    workspaceGeneration++
+    createPendingWorkspace = undefined
+    setWorkspaceBinding(null)
     stopWatchingFile()
     setStorageBinding(null)
     setFileHandle(null)
@@ -159,19 +200,47 @@ export function createDocumentSourceActions({
     void startWatchingFile()
   }
 
+  async function setWorkspaceDocumentSource(binding: WorkspaceFileBinding, create = false) {
+    await workspaceSaveTail.catch(() => undefined)
+    workspaceGeneration++
+    createPendingWorkspace = undefined
+    workspaceWriteURL(binding.writeURL)
+    stopWatchingFile()
+    setFileHandle(null)
+    setFilePath(null)
+    setStorageBinding(null)
+    setWorkspaceBinding({ ...binding, savedVersion: getSavedVersion() })
+    setSourceIdentity({ handle: null, path: null })
+    state.documentName = documentNameFromFigPath(binding.path.split('/').pop() ?? 'Untitled.fig')
+    state.autosaveEnabled = true
+    // Materialize a new empty document immediately; later edits use normal autosave.
+    if (create) await saveCurrentFigFile()
+  }
+
+  async function createWorkspaceDocumentSource(create: () => Promise<WorkspaceFileBinding>) {
+    workspaceGeneration++
+    createPendingWorkspace = create
+    setWorkspaceBinding({ documentId: '', path: '新建工作区文档', writeURL: '', savedVersion: -1 })
+    state.autosaveEnabled = true
+    await saveCurrentFigFile()
+  }
+
   function disposeDocumentIO() {
+    workspaceGeneration++
     stopWatchingFile()
     autosave.disposeAutosave()
     recovery.disposeRecovery()
   }
 
   return {
+    setWorkspaceDocumentSource,
+    createWorkspaceDocumentSource,
     setDocumentSource,
     setStorageDocumentSource,
     setPlannedFilePath,
     startWatchingCurrentFile,
     disposeDocumentIO,
-    saveFigFile,
+    saveFigFile: saveCurrentFigFile,
     saveFigFileAs,
     saveFigFileToURL,
     getStorageBinding,

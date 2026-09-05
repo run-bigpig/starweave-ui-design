@@ -1,4 +1,5 @@
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
+import type { WorkspaceFileBinding } from '@/app/document/io/workspace'
 
 export type DocumentSourceIdentity = Readonly<{
   handle: FileSystemFileHandle | null
@@ -6,6 +7,8 @@ export type DocumentSourceIdentity = Readonly<{
 }>
 
 export type DocumentSourceAccess = {
+  getWorkspaceBinding: () => WorkspaceFileBinding | null
+  setWorkspaceBinding: (binding: WorkspaceFileBinding | null) => void
   getFileHandle: () => FileSystemFileHandle | null
   setFileHandle: (handle: FileSystemFileHandle | null) => void
   getFilePath: () => string | null

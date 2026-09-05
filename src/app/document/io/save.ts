@@ -19,6 +19,8 @@ type SaveActionsOptions = Omit<DocumentSourceAccess, 'getSavedVersion'> & {
 }
 
 export function createSaveActions({
+  getWorkspaceBinding,
+  setWorkspaceBinding,
   state,
   buildFigFile,
   getFilePath,
@@ -37,6 +39,7 @@ export function createSaveActions({
   onDownloadSuccess
 }: SaveActionsOptions) {
   const writeFile = createDocumentWriter({
+    getWorkspaceBinding,
     state,
     getFilePath,
     getFileHandle,
@@ -56,10 +59,10 @@ export function createSaveActions({
     const fileHandle = getFileHandle()
     const storageBinding = getStorageBinding()
     const downloadName = getDownloadName()
-    if (storageBinding || filePath || fileHandle) {
+    if (getWorkspaceBinding() || storageBinding || filePath || fileHandle) {
       const { data, version } = await buildVersionedFigFile()
       const wrote = await writeFile(data, version)
-      if (wrote && !storageBinding) setSourceIdentity({ handle: fileHandle, path: filePath })
+      if (wrote && !storageBinding && !getWorkspaceBinding()) setSourceIdentity({ handle: fileHandle, path: filePath })
     } else if (downloadName) {
       const { data, version } = await buildVersionedFigFile()
       downloadBlob(new Uint8Array(data), downloadName, 'application/octet-stream')
@@ -75,6 +78,7 @@ export function createSaveActions({
     if (IS_TAURI) {
       const path = await chooseTauriFigSavePath()
       if (!path) return
+      setWorkspaceBinding(null)
       setStorageBinding(null)
       setFilePath(path)
       setFileHandle(null)
@@ -87,6 +91,7 @@ export function createSaveActions({
     if (window.showSaveFilePicker) {
       const handle = await chooseBrowserFigSaveHandle()
       if (!handle) return
+      setWorkspaceBinding(null)
       setStorageBinding(null)
       setFileHandle(handle)
       setFilePath(null)

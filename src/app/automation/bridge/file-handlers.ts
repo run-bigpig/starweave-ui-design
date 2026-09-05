@@ -10,6 +10,12 @@ import { isTauri } from '@/app/tauri/env'
 
 export async function handleSaveFile(target: AutomationTarget, args: unknown): Promise<unknown> {
   const store = target.store
+  // Workspace saves always target the trusted binding. A tool-supplied path
+  // must not detach autosave or turn a successful save into a browser download.
+  if (store.getWorkspaceBinding()) {
+    await store.saveFigFile()
+    return { ok: true }
+  }
   const { path, starweave_upload_url: uploadURL } = args as {
     path?: string
     starweave_upload_url?: string

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, provide, ref } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useHead } from '@unhead/vue'
 import { useRoute } from 'vue-router'
@@ -17,6 +17,7 @@ import {
   createHomeTab,
   createTab,
   getActiveStore,
+  getTabsSnapshot,
   tabCount
 } from '@/app/tabs'
 import { isTauri } from '@/app/tauri/env'
@@ -29,6 +30,18 @@ import EditorWorkspace from '@/components/editor/EditorWorkspace.vue'
 import HomeWorkspace from '@/components/home/HomeWorkspace.vue'
 
 const route = useRoute()
+const workspaceFile = computed(() => activeTab.value?.store.getWorkspaceBinding())
+const workspaceSaveStatus = computed(() => {
+  const file = workspaceFile.value
+  if (!file) return ''
+  if (file.error) return file.error
+  if (file.saving) return '正在保存…'
+  return (file.savedVersion ?? -1) < (activeTab.value?.store.state.sceneVersion ?? 0) ? '有未保存更改' : '已保存到工作区'
+})
+
+function retryWorkspaceSave() {
+  void activeTab.value?.store.saveFigFile().catch(() => undefined)
+}
 const createdInitialTab = tabCount() === 0
 const shouldCreateHome =
   route.path === '/' &&
@@ -45,6 +58,17 @@ if (createdInitialTab && route.meta.demo && !appRuntimeConfig.test) {
 useHead({ title: route.meta.demo ? 'Demo' : undefined })
 useKeyboard()
 useEditorMenu()
+
+useEventListener(window, 'beforeunload', (event: BeforeUnloadEvent) => {
+  const unsaved = getTabsSnapshot().some(tab => {
+    const binding = tab.store.getWorkspaceBinding()
+    return binding && (binding.error || binding.saving || (binding.savedVersion ?? -1) < tab.store.state.sceneVersion)
+  })
+  if (unsaved) {
+    event.preventDefault()
+    event.returnValue = ''
+  }
+})
 
 const collab = useCollab(getActiveStore)
 provide(COLLAB_KEY, collab)
@@ -104,6 +128,10 @@ onUnmounted(() => {
     <RenameSelectionDialog />
     <CommandPalette />
     <TabBar />
+    <div v-if="workspaceFile" class="flex items-center gap-2 px-3 py-1 text-xs" role="status" aria-live="polite">
+      <span>{{ workspaceFile.path }} · {{ workspaceSaveStatus }}</span>
+      <button v-if="workspaceFile.error" type="button" class="underline" @click="retryWorkspaceSave">重试保存</button>
+    </div>
     <HomeWorkspace v-show="activeTab?.kind === 'home'" @new-document="createDocumentInCurrentTab" />
     <EditorWorkspace v-if="activeTab?.kind !== 'home'" />
   </div>

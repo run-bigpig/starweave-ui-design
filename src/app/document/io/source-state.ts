@@ -1,8 +1,11 @@
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
+import type { WorkspaceFileBinding } from '@/app/document/io/workspace'
+import { ref } from 'vue'
 
 export function createDocumentSourceState() {
   let fileHandle: FileSystemFileHandle | null = null
+  const workspaceBinding = ref<WorkspaceFileBinding | null>(null)
   let filePath: string | null = null
   let downloadName: string | null = null
   let sourceIdentity: DocumentSourceIdentity = { handle: null, path: null }
@@ -11,6 +14,8 @@ export function createDocumentSourceState() {
   let lastWriteTime = 0
 
   return {
+    getWorkspaceBinding: () => workspaceBinding.value,
+    setWorkspaceBinding: (binding: WorkspaceFileBinding | null) => { workspaceBinding.value = binding },
     getFileHandle: () => fileHandle,
     setFileHandle: (handle: FileSystemFileHandle | null) => {
       fileHandle = handle

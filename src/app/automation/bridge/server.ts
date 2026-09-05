@@ -5,6 +5,7 @@ import { makeFigmaFromStore } from '@/app/automation/bridge/figma-factory'
 import { createAutomationCommandHandlers } from '@/app/automation/bridge/handlers'
 import type { EditorStore } from '@/app/editor/active-store'
 import { createTab, getTabById, getTabForStore, switchTab } from '@/app/tabs'
+import { setWorkspaceDocumentCreator, workspaceWriteURL } from '@/app/document/io/workspace'
 
 export type StarWeaveBridgePhase =
   | 'standalone'
@@ -107,7 +108,7 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
       if (message.type === 'open-session' && message.sessionId && message.token) {
         let target = sessions.get(message.sessionId)
         if (!target) {
-          const tab = createTab()
+          const tab = createTab(undefined, undefined, false)
           target = startSession(
             { sessionId: message.sessionId, token: message.token },
             tab.store
@@ -177,7 +178,23 @@ export function connectStarWeaveAutomation(getStore: () => EditorStore): () => v
   }
 
   startSession(initialConnection, getStore())
+  setWorkspaceDocumentCreator(async (parent, tabId) => {
+    const response = await fetch(workspaceWriteURL(parent.writeURL), {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ document_id: tabId })
+    })
+    if (!response.ok) throw new Error(`新建工作区文档失败 (${response.status}): ${await response.text()}`)
+    const binding = await response.json()
+    if (typeof binding.documentId !== 'string' || typeof binding.sessionToken !== 'string' || typeof binding.path !== 'string' || typeof binding.writeURL !== 'string') {
+      throw new Error('Invalid workspace document binding')
+    }
+    workspaceWriteURL(binding.writeURL)
+    const tab = getTabById(tabId)
+    if (!tab) throw new Error('Workspace document tab was closed')
+    startSession({ sessionId: binding.documentId, token: binding.sessionToken }, tab.store)
+    return { documentId: binding.documentId, path: binding.path, writeURL: binding.writeURL }
+  })
   return () => {
+    setWorkspaceDocumentCreator(undefined)
     stopped = true
     for (const session of sessions.values()) {
       clearTimeout(session.reconnectTimer)

@@ -4,10 +4,12 @@ import { describeDiagnosticError, recordDocumentFailure } from '@/app/diagnostic
 import type { StorageDocumentBinding } from '@/app/integrations/storage/types'
 import { persistStorageCanvasLocally } from '@/app/storage/sync/persist'
 import { isTauri } from '@/app/tauri/env'
+import { writeWorkspaceFile, type WorkspaceFileBinding } from '@/app/document/io/workspace'
 
 type WriteDocumentState = EditorState & { documentName: string }
 
 type DocumentWriterOptions = {
+  getWorkspaceBinding: () => WorkspaceFileBinding | null
   state: WriteDocumentState
   getFilePath: () => string | null
   getFileHandle: () => FileSystemFileHandle | null
@@ -18,6 +20,7 @@ type DocumentWriterOptions = {
 }
 
 export function createDocumentWriter({
+  getWorkspaceBinding,
   state,
   getFilePath,
   getFileHandle,
@@ -42,6 +45,12 @@ export function createDocumentWriter({
   ): Promise<boolean> {
     setLastWriteTime(Date.now())
     try {
+      const workspace = getWorkspaceBinding()
+      if (workspace) {
+        await writeWorkspaceFile(workspace, data)
+        workspace.savedVersion = version
+        return await finishWrite(version)
+      }
       const storage = getStorageBinding()
       if (storage) {
         await persistStorageCanvasLocally({

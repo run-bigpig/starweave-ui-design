@@ -56,9 +56,10 @@ export function listAutomationDocuments(activeStore: EditorStore): AutomationDoc
   return getTabsSnapshot().map((tab) => {
     const pages = tab.store.graph.getPages().map((page) => ({ id: page.id, name: page.name }))
     const currentPage = tab.store.graph.getNode(tab.store.state.currentPageId)
-    const path = tab.store.getDocumentFilePath()
+    const path = tab.store.getWorkspaceBinding()?.path ?? tab.store.getDocumentFilePath()
     return {
       id: tab.id,
+      workspace_document_id: tab.store.getWorkspaceBinding()?.documentId,
       name: tab.store.state.documentName,
       ...(path ? { path } : {}),
       active: tab.id === activeTab?.id,
@@ -94,7 +95,7 @@ export function resolveAutomationTarget(
     throw new Error(`Page "${pageId}" not found in document "${tab.id}"`)
   }
 
-  const path = tab.store.getDocumentFilePath()
+  const path = tab.store.getWorkspaceBinding()?.path ?? tab.store.getDocumentFilePath()
   return {
     store: tab.store,
     documentId: tab.id,

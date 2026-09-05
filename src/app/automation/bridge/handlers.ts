@@ -58,6 +58,14 @@ export function createAutomationCommandHandlers(makeFigma: FigmaFactory) {
     const rawArgs = isUnknownRecord(args) ? args : {}
     const target = resolveAutomationTarget(store, rawArgs)
     const targetArgs = stripAutomationTargetArgs(rawArgs)
+    if (command === 'bind_workspace_file') {
+      const { workspace_document_id: documentId, path, write_url: writeURL } = targetArgs
+      if (typeof documentId !== 'string' || typeof path !== 'string' || typeof writeURL !== 'string') {
+        throw new Error('Invalid workspace document binding')
+      }
+      await target.store.setWorkspaceDocumentSource({ documentId, path, writeURL }, targetArgs.create === true)
+      return responseWithTarget({ ok: true }, target)
+    }
     const handler = commandHandlers[command]
     const result = handler
       ? await handler(target, targetArgs)

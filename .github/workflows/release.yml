@@ -33,6 +33,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build workspace packages
         run: pnpm run build:packages
+      - name: Test workspace saving
+        run: node --test scripts/workspace-save.test.mjs
       - name: Type-check
         run: pnpm run typecheck
       - name: Build Web UI
@@ -68,6 +70,7 @@ jobs:
           const pkg = JSON.parse(await readFile('package.json', 'utf8'))
           await writeFile('dist/starweave-ui-build.json', `${JSON.stringify({
             schemaVersion: 1,
+            workspaceFileProtocol: 1,
             version: pkg.version,
             tag: process.env.GITHUB_REF_NAME,
             commit: process.env.GITHUB_SHA

@@ -24,16 +24,16 @@ description: 使用 StarWeave Design 的 MCP 画布把文字描述、截图或�
 
 主要工具按用途选择：
 
-- 打开与上下文：`open_design_workspace`、`open_file`、`new_document`、`list_documents`、`get_current_page`、`get_page_tree`、`get_node`。`open_file` 会通过桌面原生对话框让用户授权选择 `.fig`；`new_document` 会创建新的独立设计会话和文件绑定，只在用户明确要求另开空白设计时使用。
+- 打开与上下文：`open_design_workspace`、`open_file`、`new_document`、`list_documents`、`get_current_page`、`get_page_tree`、`get_node`。`open_design_workspace` 默认恢复当前聊天在工作区的最近设计；`open_file({path: "designs/Landing.fig"})` 按工作区相对路径打开已有文件，无需弹窗。`new_document` 创建新的独立设计，只在用户明确要求另开空白设计时使用。不要传绝对路径、越界路径或其他聊天的设计 ID。
 - 查找与选区：`get_selection`、`find_nodes`、`query_nodes`、`select_nodes`。
 - 生成：`render`。使用 `parent_id` 向稳定容器填充，使用 `replace_id` 替换完整区域。
 - 精确修改：`set_text`、`set_fill`、`set_stroke`、`set_layout`、`set_layout_child`、`set_radius`、`set_text_properties`、`update_node`、`batch_update`。
 - 结构调整：`reparent_node`、`node_move`、`node_resize`、`clone_node`、`delete_node`、`arrange`。
 - 检查：`describe`、`analyze_overlaps`、`analyze_spacing`、`analyze_colors`、`analyze_typography`、`export_image`。
 - 视口：只在需要查看整体或定位目标时使用 `viewport_zoom_to_fit`、`viewport_get`、`viewport_set`。
-- 保存：每个设计任务完成前都必须调用 `save_file`，不能只在用户额外要求时才保存。不要声称已保存，除非工具成功返回。首次保存会请用户选择 `.fig` 路径；同一会话后续保存会静默覆盖，并用于下次按 `design_session_id` 恢复画布。
+- 保存：新建默认写入所属工作区的 `designs/Untitled-<ID>.fig`，后续编辑自动保存到同一文件。每个设计任务完成前仍必须调用 `save_file`，确保最后一批编辑已经落盘；不要声称已保存，除非工具成功返回。按 `design_session_id` 可恢复对应文件。已有设计不会随工作区切换而迁移。
 
-如果 `save_file` 因用户取消路径选择而失败，必须明确提示：当前画布尚未持久化，关闭窗口或重启 StarWeave 后可能无法恢复；请用户完成一次保存。不能把内存中的画布描述为已经交付。
+如果工作区未选定、不可写或 `save_file` 失败，必须明确提示尚有未保存更改并保留画布供重试，不要自行改存其他目录。不能把内存中的画布描述为已经交付。外部文件导入和另存为仍由用户在 UI 中选择。
 
 `render` 使用 OpenPencil JSX。例如：
 
